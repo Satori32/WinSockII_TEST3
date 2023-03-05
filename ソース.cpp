@@ -4,6 +4,8 @@
 #include <tuple>
 #include <string>
 
+#include <conio.h>
+
 #include <WinSock2.h>
 #include <WS2tcpip.h>
 #pragma comment(lib,"ws2_32.lib")
@@ -30,15 +32,15 @@ public:
 protected:
 	WSADATA WD = { 0, };
 };
-class TCPClient {
+class TCPServer {
 public:
-	TCPClient() {}
-	TCPClient(unsigned long IP, u_short Port) {
+	TCPServer() {}
+	TCPServer(unsigned long IP, u_short Port) {
 		Connect(IP, Port);
 		return;
 	}
 
-	virtual ~TCPClient() {
+	virtual ~TCPServer() {
 		if (IsRunning()) { DisConnect(); }
 		return;
 	}
@@ -46,6 +48,9 @@ public:
 		return S != INVALID_SOCKET;
 	}
 
+	SOCKET GetSocket() {
+		return S;
+	}
 
 	int Connect(unsigned long IP, unsigned short Port) {
 		S = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -169,25 +174,49 @@ std::string GetHostByAddr(std::string Addr) {
 	return LHT->h_name;
 }
 
+int KeyIn() {
+	if (_kbhit()) {
+		return _getch();
+	}
+
+	return 0;
+}
+
 int main() {
 	WinSockCaller WS;
 	WS.Call();
 	const char *HN1 = "www.yahoo.co.jp";
 	const char* HN2 = "www.google.co.jp";
 	const char* HN3 = "www.microsoft.co.jp";
-	auto IP=GetIPByName(HN2);//this is not perfect. ex.microsoft.
+	const char* HN4 = "localhost.";
+	u_short Po = 27015;
+
+	auto IP=GetIPByName(HN4);//this is not perfect. ex.microsoft.
 
 	//auto A = GetHostByAddr(SepIP(std::get<1>(IP[0])));
 	
 
-	TCPClient TCP(std::get<1>(IP[0]), 23);
+	TCPServer TCP(std::get<1>(IP[0]), Po);
 	auto A=WSAGetLastError();
 
-	if (!TCP.IsRunning()) { return -1; }
-	auto X = TCP.Read();
-	const char M[] = "Hello world!";
-	TCP.Wrire(M, sizeof(M));
+	std::vector<SOCKET> SS;
 
+	const std::size_t L = (1<<15)-1;
+	char C[L] = {0,};
+
+	while (TCP.IsRunning()) {
+		SOCKET B = accept(TCP.GetSocket(), nullptr, nullptr);
+		if (B != INVALID_SOCKET) { SS.push_back(B); }
+		std::cout <<"Size:" << SS.size() << '\r';
+		for (auto o : SS) {
+			std::size_t LL = recv(o, C, L, 0);
+			std::cout << C << std::endl;
+			send(o, C, LL, 0);
+		}
+		std::cout << "\rRunning!";
+		if (KeyIn() == 27) { break; }
+	}
+	//for (auto o : SS) { closesocket(o); }
 	return 0;
 	
 }
