@@ -254,12 +254,12 @@ int main() {
 			std::cout << "Start Waiting Accept." << std::endl;
 		}
 		if (K == 27) {
-			break;
 			std::cout << "End App Loop." << std::endl;
+			break;
 		}
 	}
 
-
+	return 0;
 
 }
 
