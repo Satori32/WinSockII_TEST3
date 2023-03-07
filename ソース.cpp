@@ -3,11 +3,15 @@
 #include <cstdint>
 #include <tuple>
 #include <string>
+#include <future>
+#include <deque>
+#include <algorithm>
 
 #include <conio.h>
 
 #include <WinSock2.h>
 #include <WS2tcpip.h>
+
 #pragma comment(lib,"ws2_32.lib")
 #pragma warning(disable : 4996)
 
@@ -48,6 +52,8 @@ public:
 		return S != INVALID_SOCKET;
 	}
 
+	
+
 	SOCKET GetSocket() {
 		return S;
 	}
@@ -71,15 +77,15 @@ public:
 		return 0;
 	}
 
-	int Write(const std::vector<char>& In) {
-		return send(S, In.data(), In.size(), 0);
+	int Write(const std::vector<char>& In,std::size_t Pos) {
+		return send(SS[Pos], In.data(), In.size(), 0);
 	}
 
-	int Wrire(const char* Data, std::size_t L) {
-		return send(S, Data, L, 0);
+	int Wrire(const char* Data, std::size_t L,std::size_t Pos) {
+		return send(SS[Pos], Data, L, 0);
 	}
 
-	std::vector<char> Read() {
+	std::vector<char> Read(std::size_t Pos) {
 
 		static const int L = 65000;
 		char D[L] = { 0, };
@@ -92,7 +98,7 @@ public:
 
 
 		do {
-			R = recv(S, D, L, 0);
+			R = recv(SS[Pos], D, L, 0);
 			if (R != SOCKET_ERROR) { RR.insert(RR.end(), D, D + R); }//min provide by windows. yes i know STL Have too.but it is confrict. 
 			auto a = WSAGetLastError();
 		} while (R != SOCKET_ERROR && R != 0);
@@ -102,15 +108,23 @@ public:
 
 		return RR;
 	}
-	int Read(char* Buf, std::size_t L) {
+	int Read(char* Buf, std::size_t L,std::size_t Pos) {
 		int SA = sizeof(SA);
-		return recv(S, Buf, L, 0);
+		return recv(SS[Pos], Buf, L, 0);
 		//return recvfrom(S, Buf, L, 0, (SOCKADDR*)&A, &SA);
+	}
+
+	int Accept() {
+		SOCKET X = accept(S, nullptr, nullptr);//this is blocking function. i need async it.
+		if (X != INVALID_SOCKET) { SS.push_back(X); }
+		return X;
 	}
 
 	SOCKADDR_IN GetSockAdder() {
 		return SA;
 	}
+
+	std::size_t Size() { return SS.size(); }
 
 	int DisConnect() {
 		int A = shutdown(S, SD_BOTH);
@@ -121,9 +135,20 @@ public:
 		return B;
 	}
 
+	std::vector<SOCKET>::iterator begin() {
+		return SS.begin();
+	}
+	std::vector<SOCKET>::iterator end() {
+		return SS.end();
+	}
+	SOCKET operator[](std::size_t In) {
+		return SS[In];
+	}
+
 protected:
 	SOCKET S = INVALID_SOCKET;
 	SOCKADDR_IN SA = { 0, };
+	std::vector<SOCKET> SS;
 };
 
 unsigned long IPByNumber(unsigned char A, unsigned char B, unsigned char C, unsigned char D) {
@@ -175,16 +200,74 @@ std::string GetHostByAddr(std::string Addr) {
 }
 
 int KeyIn() {
-	if (_kbhit()) {
-		return _getch();
+
+	int K = 0;
+
+	if (_kbhit()!=0) {
+		K = _getch();
 	}
 
-	return 0;
+	return K;
 }
 
 int main() {
+	WinSockCaller WC;
+	WC.Call();
+
+	const char* HN4 = "localhost.";
+	u_short Po = 27015;
+
+	auto IP = GetIPByName(HN4);
+
+	std::cout << "Start Setup." << std::endl;
+
+	TCPServer TS;
+	auto A = TS.Connect(std::get<1>(IP[0]), Po);
+
+	if (A == SOCKET_ERROR) { return -1; }
+
+	std::cout << "Start Loop." << std::endl;
+
+	bool F = true;
+
+	while (TS.IsRunning()) {
+		if (F) { 
+			int D = TS.Accept();//we need async this.
+			if (D != SOCKET_ERROR) {	std::cout << "I Got New Connection." << std::endl;}
+			F = false;
+		}
+		
+		for (std::size_t i = 0; i < TS.Size(); i++) {
+			const size_t L = (1 << 15) - 1;
+			char B[L] = { 0, };
+
+			int X = recv(TS[i], B, L, 0);
+			int Y = min(X, L);
+			B[Y] = '\0';
+			std::cout << "InComing:" << B << std::endl;
+			int Z = send(TS[i], B, Y, 0);//where am i send to...????
+			std::cout << "Done Send : " <<Z<< std::endl;
+		}
+		int K = KeyIn();
+		if (K == ' ') { 
+			F = true; 
+			std::cout << "Start Waiting Accept." << std::endl;
+		}
+		if (K == 27) {
+			break;
+			std::cout << "End App Loop." << std::endl;
+		}
+	}
+
+
+
+}
+
+/** /
+int main() {
 	WinSockCaller WS;
 	WS.Call();
+
 	const char *HN1 = "www.yahoo.co.jp";
 	const char* HN2 = "www.google.co.jp";
 	const char* HN3 = "www.microsoft.co.jp";
@@ -199,24 +282,37 @@ int main() {
 	TCPServer TCP(std::get<1>(IP[0]), Po);
 	auto A=WSAGetLastError();
 
+	std::cout << "START TCP Server!" << std::endl;
+	
 	std::vector<SOCKET> SS;
 
 	const std::size_t L = (1<<15)-1;
 	char C[L] = {0,};
 
+	std::cout << "Start Loop!" << std::endl;
+	std::deque<SOCKET> SQ;
 	while (TCP.IsRunning()) {
-		SOCKET B = accept(TCP.GetSocket(), nullptr, nullptr);
-		if (B != INVALID_SOCKET) { SS.push_back(B); }
+		auto F = std::async(std::launch::deferred, [&](){while (TCP.IsRunning()) { SQ.push_back(accept(TCP.GetSocket(), nullptr, nullptr)); }});
+		if (F.wait_for(std::chrono::seconds(1))!=std::future_status::timeout) { F.wait(); };
+		for (auto o : SQ) {
+			if (o != INVALID_SOCKET) { SS.push_back(o); }
+		}
+		SQ.clear();
+
 		std::cout <<"Size:" << SS.size() << '\r';
 		for (auto o : SS) {
-			std::size_t LL = recv(o, C, L, 0);
-			std::cout << C << std::endl;
-			send(o, C, LL, 0);
+			int LL = recv(o, C, L, 0);
+			if (LL != SOCKET_ERROR) {
+				C[LL] = '\0';
+				std::cout << C << std::endl;
+				send(o, C, LL, 0);
+			}
 		}
-		std::cout << "\rRunning!";
+		std::cout << "Running!" << std::endl;
 		if (KeyIn() == 27) { break; }
 	}
 	//for (auto o : SS) { closesocket(o); }
 	return 0;
 	
 }
+/**/
