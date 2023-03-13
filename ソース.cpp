@@ -38,6 +38,9 @@ protected:
 };
 class TCPServer {
 public:
+
+	typedef std::tuple<SOCKET, SOCKADDR_IN> Socket;
+public:
 	TCPServer() {}
 	TCPServer(unsigned long IP, u_short Port) {
 		Connect(IP, Port);
@@ -78,11 +81,11 @@ public:
 	}
 
 	int Write(const std::vector<char>& In,std::size_t Pos) {
-		return send(SS[Pos], In.data(), In.size(), 0);
+		return send(std::get<0>(SS[Pos]), In.data(), In.size(), 0);
 	}
 
 	int Wrire(const char* Data, std::size_t L,std::size_t Pos) {
-		return send(SS[Pos], Data, L, 0);
+		return send(std::get<0>(SS[Pos]), Data, L, 0);
 	}
 
 	std::vector<char> Read(std::size_t Pos) {
@@ -98,7 +101,7 @@ public:
 
 
 		do {
-			R = recv(SS[Pos], D, L, 0);
+			R = recv(std::get<0>(SS[Pos]), D, L, 0);
 			if (R != SOCKET_ERROR) { RR.insert(RR.end(), D, D + R); }//min provide by windows. yes i know STL Have too.but it is confrict. 
 			auto a = WSAGetLastError();
 		} while (R != SOCKET_ERROR && R != 0);
@@ -110,13 +113,16 @@ public:
 	}
 	int Read(char* Buf, std::size_t L,std::size_t Pos) {
 		int SA = sizeof(SA);
-		return recv(SS[Pos], Buf, L, 0);
+		return recv(std::get<0>(SS[Pos]), Buf, L, 0);
 		//return recvfrom(S, Buf, L, 0, (SOCKADDR*)&A, &SA);
 	}
 
 	int Accept() {
-		SOCKET X = accept(S, nullptr, nullptr);//this is blocking function. i need async it.
-		if (X != INVALID_SOCKET) { SS.push_back(X); }
+		SOCKADDR_IN SI = { 0, };
+		int L = sizeof(SI);
+		
+		SOCKET X = accept(S, (sockaddr*) & SI, &L);//this is blocking function. i need async it.
+		if (X != INVALID_SOCKET) { SS.push_back({ X,SI }); }
 		return X;
 	}
 
@@ -135,20 +141,22 @@ public:
 		return B;
 	}
 
-	std::vector<SOCKET>::iterator begin() {
+	std::vector<Socket>::iterator begin() {
 		return SS.begin();
 	}
-	std::vector<SOCKET>::iterator end() {
+	std::vector<Socket>::iterator end() {
 		return SS.end();
 	}
-	SOCKET operator[](std::size_t In) {
+	Socket operator[](std::size_t In) {
 		return SS[In];
 	}
 
 protected:
+
+
 	SOCKET S = INVALID_SOCKET;
 	SOCKADDR_IN SA = { 0, };
-	std::vector<SOCKET> SS;
+	std::vector<Socket> SS;
 };
 
 unsigned long IPByNumber(unsigned char A, unsigned char B, unsigned char C, unsigned char D) {
@@ -219,6 +227,8 @@ int main() {
 
 	auto IP = GetIPByName(HN4);
 
+	std::cout << "Welcome to TCPServer!" << std::endl;
+
 	std::cout << "Start Setup." << std::endl;
 
 	TCPServer TS;
@@ -241,11 +251,11 @@ int main() {
 			const size_t L = (1 << 15) - 1;
 			char B[L] = { 0, };
 
-			int X = recv(TS[i], B, L, 0);
+			int X = recv(std::get<0>(TS[i]), B, L, 0);
 			int Y = min(X, L);
-			B[Y] = '\0';
-			std::cout << "InComing:" << B << std::endl;
-			int Z = send(TS[i], B, Y, 0);//where am i send to...????
+			B[min(Y,L-1)] = '\0';
+			std::cout << "In:" << B << std::endl;
+			int Z = send(std::get<0>(TS[i]), B, Y, 0);//where am i send to...????
 			std::cout << "Done Send : " <<Z<< std::endl;
 		}
 		int K = KeyIn();
@@ -257,6 +267,12 @@ int main() {
 			std::cout << "End App Loop." << std::endl;
 			break;
 		}
+	}
+
+	char LAST[] = "Server is going to shutdown!";
+
+	for (auto o : TS) {
+		send(std::get<0>(o), LAST, sizeof(LAST), 0);
 	}
 
 	return 0;
