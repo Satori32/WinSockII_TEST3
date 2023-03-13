@@ -63,7 +63,7 @@ public:
 
 	int Connect(unsigned long IP, unsigned short Port) {
 		S = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-		if (S == INVALID_SOCKET) { return INVALID_SOCKET; }
+		if (S == INVALID_SOCKET) { return SOCKET_ERROR; }
 
 		SOCKADDR_IN SI = { 0 , };
 
@@ -87,7 +87,7 @@ public:
 	int Wrire(const char* Data, std::size_t L,std::size_t Pos) {
 		return send(std::get<0>(SS[Pos]), Data, L, 0);
 	}
-
+	/** /
 	std::vector<char> Read(std::size_t Pos) {
 
 		static const int L = 65000;
@@ -111,13 +111,14 @@ public:
 
 		return RR;
 	}
+	/**/
 	int Read(char* Buf, std::size_t L,std::size_t Pos) {
 		int SA = sizeof(SA);
 		return recv(std::get<0>(SS[Pos]), Buf, L, 0);
 		//return recvfrom(S, Buf, L, 0, (SOCKADDR*)&A, &SA);
 	}
 
-	int Accept() {
+	SOCKET Accept() {
 		SOCKADDR_IN SI = { 0, };
 		int L = sizeof(SI);
 		
@@ -242,7 +243,7 @@ int main() {
 
 	while (TS.IsRunning()) {
 		if (F) { 
-			int D = TS.Accept();//we need async this.
+			SOCKET D = TS.Accept();//we need async this.
 			if (D != SOCKET_ERROR) {	std::cout << "I Got New Connection." << std::endl;}
 			F = false;
 		}
@@ -257,6 +258,7 @@ int main() {
 			std::cout << "In:" << B << std::endl;
 			int Z = send(std::get<0>(TS[i]), B, Y, 0);//where am i send to...????
 			std::cout << "Done Send : " <<Z<< std::endl;
+			if (Z == -1) { break; }
 		}
 		int K = KeyIn();
 		if (K == ' ') { 
