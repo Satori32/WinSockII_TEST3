@@ -131,6 +131,12 @@ public:
 		return SA;
 	}
 
+	bool Drop(std::size_t N) {
+		if (N >= SS.size()) { return false; }
+		SS.erase(SS.begin() + N);
+		return true;
+	}
+
 	std::size_t Size() { return SS.size(); }
 
 	int DisConnect() {
@@ -258,7 +264,7 @@ int main() {
 			std::cout << "In:" << B << std::endl;
 			int Z = send(std::get<0>(TS[i]), B, Y, 0);//where am i send to...????
 			std::cout << "Done Send : " <<Z<< std::endl;
-			if (Z == -1) { break; }
+			if (Z == -1) { TS.Drop(i); i--; }
 		}
 		int K = KeyIn();
 		if (K == ' ') { 
